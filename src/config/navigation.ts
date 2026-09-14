@@ -1,7 +1,6 @@
 import {
   BarChart3,
   CalendarDays,
-  FormInput,
   Home,
   LayoutGrid,
   MapPin,
@@ -73,7 +72,7 @@ export const NAVIGATION: NavGroup[] = [
         label: "Operaciones",
         href: "/operaciones",
         icon: LayoutGrid,
-        description: "Citas, portería, formularios y muelles",
+        description: "Citas, portería y muelles",
         children: [
           {
             label: "Citas y muelles",
@@ -95,13 +94,6 @@ export const NAVIGATION: NavGroup[] = [
             description: "Garita, inspección vehicular, patio y pase del conductor",
             access: (c) =>
               c.isSiteAdmin || c.isGateOfficer || c.rolCodigo === "OPERADOR_MUELLE" || c.hasPermission("PORTERIA_LEER"),
-          },
-          {
-            label: "Formularios",
-            href: "/operaciones/formularios",
-            icon: FormInput,
-            description: "Formularios dinámicos, etapas del workflow y reglas de paso",
-            access: (c) => c.isSiteAdmin || c.hasPermission("FORMULARIOS_LEER"),
           },
           {
             label: "Sedes y muelles",
