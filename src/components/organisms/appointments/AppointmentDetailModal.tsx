@@ -84,8 +84,8 @@ export function AppointmentDetailModal({
   const canRegisterEntry = isGlobalAdmin || isSiteAdmin || isGateOfficer || hasPermission("PORTERIA_REGISTRO");
   const canCallToDock = isGlobalAdmin || isSiteAdmin || isGateOfficer || hasPermission("MUELLES_HABILITAR", undefined, cita.muelleId);
   const canUnload = isGlobalAdmin || isSiteAdmin || esOperadorMuelle || hasPermission("MUELLES_HABILITAR", undefined, cita.muelleId);
-  const canCancel = isProvider ? cita.estado === "SOLICITADA" : isGlobalAdmin || isSiteAdmin || hasPermission("CITAS_CANCELAR");
   const terminal = ["COMPLETADA", "CANCELADA", "RECHAZADA", "NO_SHOW"].includes(cita.estado);
+  const canCancel = !terminal && cita.estado === "CONFIRMADA" && (isProvider || isGlobalAdmin || isSiteAdmin || hasPermission("CITAS_CANCELAR"));
 
   const acciones: { visible: boolean; estado: EstadoCita; label: string; icon: React.ReactNode }[] = [
     { visible: cita.estado === "SOLICITADA" && canApprove, estado: "CONFIRMADA", label: "Aprobar y confirmar", icon: <CheckCircle2 size={14} /> },
@@ -94,6 +94,7 @@ export function AppointmentDetailModal({
     { visible: cita.estado === "EN_MUELLE" && canUnload, estado: "DESCARGANDO", label: "Iniciar descargue", icon: <Package size={14} /> },
     { visible: cita.estado === "DESCARGANDO" && canUnload, estado: "COMPLETADA", label: "Finalizar descargue", icon: <CheckCircle2 size={14} /> },
   ];
+  const esCitaEspecial = Boolean(cita.esCitaEspecial || cita.motivoCitaEspecial);
   const visibles = acciones.filter((a) => a.visible);
   const showLifecycle = visibles.length > 0 || (!terminal && canCancel);
 
@@ -148,6 +149,12 @@ export function AppointmentDetailModal({
               }
             />
           </div>
+
+          {esCitaEspecial && (
+            <Alert variant="warning" title="Cita especial">
+              {cita.motivoCitaEspecial || "Caso único aprobado por la sede para atención diferenciada."}
+            </Alert>
+          )}
 
           {showLifecycle && (
             <div className="space-y-3 rounded-xl border p-4" style={{ background: "var(--inset-bg)", borderColor: "var(--inset-border)" }}>

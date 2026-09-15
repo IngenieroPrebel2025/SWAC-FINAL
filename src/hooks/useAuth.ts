@@ -36,8 +36,8 @@ export function useAuth() {
   }, [allSedes, usuario, isGlobalAdmin]);
 
   const activeSede = useMemo(
-    () => availableSedes.find((s) => s.id === activeSedeId) ?? availableSedes[0] ?? null,
-    [availableSedes, activeSedeId]
+    () => (isGlobalAdmin ? availableSedes.find((s) => s.id === activeSedeId) : availableSedes[0]) ?? null,
+    [availableSedes, activeSedeId, isGlobalAdmin]
   );
 
   const hasPermission = useCallback(
@@ -50,9 +50,9 @@ export function useAuth() {
 
   const setActiveSedeId = useCallback(
     (sedeId: string) => {
-      if (checkSede(session, sedeId)) dispatch(setActiveSede(sedeId));
+      if (isGlobalAdmin && checkSede(session, sedeId)) dispatch(setActiveSede(sedeId));
     },
-    [dispatch, session]
+    [dispatch, isGlobalAdmin, session]
   );
 
   const login = useCallback(
@@ -99,7 +99,7 @@ export function useAuth() {
     availableSedes,
     activeSede,
     activeSedeId,
-    hasMultipleSedes: availableSedes.length > 1,
+    hasMultipleSedes: isGlobalAdmin && availableSedes.length > 1,
     hasPermission,
     isAllowedInSede,
     setActiveSedeId,

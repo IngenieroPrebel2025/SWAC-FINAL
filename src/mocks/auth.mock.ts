@@ -76,7 +76,7 @@ export const MOCK_ROLES: Rol[] = [
     nombre: 'Proveedor Logístico',
     descripcion: 'Acceso exclusivo a la solicitud de citas y consulta de histórico asociadas a su NIT o cuenta de empresa.',
     esSistema: true,
-    permisosIds: ['perm-08', 'perm-09'],
+    permisosIds: ['perm-08', 'perm-09','perm-12'],
     activo: true,
     creadoEn: '2025-01-01T00:00:00Z',
     actualizadoEn: '2025-01-01T00:00:00Z'
@@ -184,7 +184,7 @@ export const MOCK_USUARIOS: Usuario[] = [
     rolCodigo: 'PROVEEDOR',
     proveedorId: 'prov-xyz', // Proveedor XYZ S.A.S.
     nit_proveedor: '900.123.456-1',
-    sedesAsignadasIds: ['sede-rio-01', 'sede-com-03'], // Rionegro y Medellín
+    sedesAsignadasIds: [], // El proveedor no está atado a una sede; la elige al solicitar la cita
     activo: true,
     ultimoAcceso: '2026-02-27T07:40:00Z',
     creadoEn: '2025-01-15T10:00:00Z',

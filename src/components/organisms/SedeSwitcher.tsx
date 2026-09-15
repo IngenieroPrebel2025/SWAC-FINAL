@@ -7,7 +7,8 @@ import { toast } from "@/lib/toast";
 
 /** Selector de sede operativa activa (multi-sede) o indicador de sede fijada por perfil. */
 export function SedeSwitcher() {
-  const { activeSede, availableSedes, hasMultipleSedes, setActiveSedeId, isGlobalAdmin } = useAuth();
+  const { activeSede, availableSedes, hasMultipleSedes, setActiveSedeId, isGlobalAdmin, isProvider } = useAuth();
+  if (isProvider) return null;
   if (!activeSede) return null;
 
   const label = (
@@ -19,7 +20,7 @@ export function SedeSwitcher() {
     </>
   );
 
-  if (!hasMultipleSedes) {
+  if (!isGlobalAdmin || !hasMultipleSedes) {
     return (
       <div
         title="Sede fijada por el perfil de aislamiento operacional"

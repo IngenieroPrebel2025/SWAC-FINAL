@@ -41,7 +41,7 @@ export function AppointmentsView() {
 
   const [selected, setSelected] = useState<Cita | null>(null);
   const [toDelete, setToDelete] = useState<Cita | null>(null);
-  const [wizard, setWizard] = useState<{ open: boolean; slot?: { muelleId: string; horaInicio: string } }>({ open: false });
+  const [wizard, setWizard] = useState<{ open: boolean; slot?: { muelleId: string; horaInicio: string }; special?: boolean }>({ open: false });
 
   const today = todayIso();
   const tomorrow = shiftIsoDate(today, 1);
@@ -62,7 +62,8 @@ export function AppointmentsView() {
   const cambiarEstado = useCambiarEstadoCita();
   const eliminar = useEliminarCita();
 
-  const canCreate = hasPermission("CITAS_SOLICITAR");
+  const canCreate = hasPermission("CITAS_SOLICITAR") || isGlobalAdmin;
+  const canCreateSpecial = !isProvider && (isGlobalAdmin || isSiteAdmin);
   const canManageCapacity = !isProvider && (isGlobalAdmin || isSiteAdmin);
   const canDelete = isGlobalAdmin || isSiteAdmin;
   const effectiveTab = (tab === "capacidad" && !canManageCapacity) || (tab === "cronograma" && isProvider) ? "listado" : tab;
@@ -212,10 +213,19 @@ export function AppointmentsView() {
             : "Programa la llegada de proveedores, asigna muelles de descargue y consulta el horario del día."
         }
         actions={
-          canCreate ? (
-            <Button leftIcon={<Plus size={15} />} onClick={() => setWizard({ open: true })}>
-              Programar cita
-            </Button>
+          canCreate || canCreateSpecial ? (
+            <div className="flex flex-wrap gap-2">
+              {canCreate && (
+                <Button leftIcon={<Plus size={15} />} onClick={() => setWizard({ open: true })}>
+                  Programar cita
+                </Button>
+              )}
+              {canCreateSpecial && (
+                <Button variant="secondary" leftIcon={<Calendar size={15} />} onClick={() => setWizard({ open: true, special: true })}>
+                  Asignar cita especial
+                </Button>
+              )}
+            </div>
           ) : undefined
         }
       />
@@ -241,7 +251,7 @@ export function AppointmentsView() {
         <AppointmentsGanttTimeline
           citas={citasDia}
           muelles={muelles}
-          sedes={availableSedes}
+          sedes={isGlobalAdmin ? availableSedes : activeSede ? [activeSede] : []}
           proveedores={proveedores}
           vehiculos={vehiculos}
           sedeId={sedeId}
@@ -257,7 +267,7 @@ export function AppointmentsView() {
         <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center">
           <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Radicado, SKU u orden de compra…" aria-label="Buscar citas" containerClassName="xl:max-w-xs" />
           <div className="flex flex-1 flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
-            {availableSedes.length > 1 && (
+            {isGlobalAdmin && availableSedes.length > 1 && (
               <div className="sm:w-48">
                 <Select value={sedeId} onChange={(e) => setActiveSedeId(e.target.value)} aria-label="Sede">
                   {availableSedes.map((s) => (
@@ -323,9 +333,16 @@ export function AppointmentsView() {
                       Ver todas las fechas
                     </Button>
                     {canCreate && (
-                      <Button size="sm" leftIcon={<Plus size={13} />} onClick={() => setWizard({ open: true })}>
-                        Programar cita
-                      </Button>
+                      <>
+                        <Button size="sm" leftIcon={<Plus size={13} />} onClick={() => setWizard({ open: true })}>
+                          Programar cita
+                        </Button>
+                        {canCreateSpecial && (
+                          <Button variant="secondary" size="sm" leftIcon={<Calendar size={13} />} onClick={() => setWizard({ open: true, special: true })}>
+                            Cita especial
+                          </Button>
+                        )}
+                      </>
                     )}
                   </div>
                 ) : undefined
@@ -363,6 +380,7 @@ export function AppointmentsView() {
         initialFecha={fechaDia}
         initialSlot={wizard.slot}
         lockedProveedorId={proveedorId}
+        defaultSpecial={Boolean(wizard.special)}
         onClose={() => setWizard({ open: false })}
         onCreated={(cita) => {
           toast.success(`Cita ${cita.codigoCita} programada con éxito`);

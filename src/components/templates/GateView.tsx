@@ -33,7 +33,7 @@ import type { Cita, RegistroSalidaPorteria, TurnoPatio } from "@/types";
 const ESTADOS_GARITA = new Set(["SOLICITADA", "CONFIRMADA", "EN_PORTERIA", "EN_MUELLE", "DESCARGANDO", "COMPLETADA"]);
 
 export function GateView() {
-  const { activeSede, activeSedeId, availableSedes, setActiveSedeId } = useAuth();
+  const { activeSede, activeSedeId, availableSedes, setActiveSedeId, isGlobalAdmin } = useAuth();
   const sedeId = activeSede?.id ?? activeSedeId;
 
   const [tab, setTab] = useState("garita");
@@ -257,7 +257,7 @@ export function GateView() {
             containerClassName="lg:max-w-sm"
           />
           <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
-            {availableSedes.length > 1 && (
+            {isGlobalAdmin && availableSedes.length > 1 && (
               <div className="sm:w-52">
                 <Select value={sedeId} onChange={(e) => setActiveSedeId(e.target.value)} aria-label="Sede">
                   {availableSedes.map((s) => (

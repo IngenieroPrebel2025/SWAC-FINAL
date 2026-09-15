@@ -11,6 +11,9 @@ export const citaItemSchema = z.object({
   materialId: z.string().min(1, "Selecciona el material"),
   cantidadEstibas: entero(1, 36, "Estibas"),
   cantidadUnidades: entero(1, 100000, "Unidades"),
+  cantidadCajasRecipientes: entero(1, 1000, "Cajas o recipientes").optional(),
+  cantidadPorCaja: entero(1, 100000, "Cantidad por caja").optional(),
+  saldoBodega: entero(0, 100000, "Saldo").optional(),
   ordenCompraNumero: z.string().min(3, "Orden de compra requerida").max(40),
 });
 
@@ -22,6 +25,8 @@ export const citaWizardSchema = z.object({
   tipoMaterialId: z.string().min(1, "Selecciona el tipo de material"),
   fechaCita: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Selecciona una fecha válida"),
   items: z.array(citaItemSchema).min(1, "Agrega al menos un SKU"),
+  esCitaEspecial: z.boolean().default(false),
+  motivoCitaEspecial: z.string().max(250, "Máximo 250 caracteres").optional(),
   // Paso 3 — solicitud de información
   correosSolicitud: z.array(z.string().email("Ingresa un correo válido")).min(1, "Agrega al menos un correo de contacto"),
   vehiculoPlaca: z.string().regex(/^[A-Z]{3}-?\d{3}$/i, "Placa inválida (ej. WZM-481)"),
@@ -34,11 +39,22 @@ export const citaWizardSchema = z.object({
   conductorArl: z.string().min(2, "ARL requerida"),
   conductorEps: z.string().min(2, "EPS requerida"),
   observaciones: z.string().max(500, "Máximo 500 caracteres"),
+}).superRefine((data, ctx) => {
+  if (data.esCitaEspecial) {
+    const motivo = data.motivoCitaEspecial?.trim() ?? "";
+    if (motivo.length < 10) {
+      ctx.addIssue({
+        path: ["motivoCitaEspecial"],
+        code: z.ZodIssueCode.custom,
+        message: "Explica el caso único con al menos 10 caracteres",
+      });
+    }
+  }
 });
 
 export type CitaWizardData = z.infer<typeof citaWizardSchema>;
 
-export const PASO_1_FIELDS = ["sedeId", "proveedorId", "tipoOperacion", "tipoMaterialId", "fechaCita", "items"] as const;
+export const PASO_1_FIELDS = ["sedeId", "proveedorId", "tipoOperacion", "tipoMaterialId", "fechaCita", "items", "esCitaEspecial", "motivoCitaEspecial"] as const;
 export const PASO_3_FIELDS = ["correosSolicitud"] as const;
 
 export const cancelacionSchema = z.object({
