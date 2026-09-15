@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, Clock, Lock, Mail, Package, Plus, QrCode, Sparkles, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, Clock, Lock, Mail, Package, Plus, QrCode, Sparkles, Trash2, Upload, X } from "lucide-react";
 import { Modal } from "@/components/molecules/Modal";
 import { Field } from "@/components/molecules/Field";
 import { SectionHeading } from "@/components/molecules/SectionHeading";
@@ -33,8 +33,17 @@ interface AppointmentWizardModalProps {
   initialFecha: string;
   initialSlot?: { muelleId: string; horaInicio: string };
   lockedProveedorId?: string;
+  defaultSpecial?: boolean;
   onClose: () => void;
   onCreated: (cita: Cita) => void;
+}
+
+interface BulkSkuRow {
+  materialId: string;
+  cantidadEstibas: number;
+  cantidadUnidades: number;
+  ordenCompraNumero: string;
+  error?: string;
 }
 
 const STEPS = ["Carga y parámetros", "Slot y bahía", "Solicitud de información", "Radicado"];
@@ -52,6 +61,7 @@ export function AppointmentWizardModal({
   initialFecha,
   initialSlot,
   lockedProveedorId,
+  defaultSpecial = false,
   onClose,
   onCreated,
 }: AppointmentWizardModalProps) {
@@ -62,6 +72,10 @@ export function AppointmentWizardModal({
   const [lockLeft, setLockLeft] = useState(600);
   const [created, setCreated] = useState<Cita | null>(null);
   const [correoInput, setCorreoInput] = useState("");
+  const [bulkSkuOpen, setBulkSkuOpen] = useState(false);
+  const [bulkSkuText, setBulkSkuText] = useState("");
+  const [bulkSkuRows, setBulkSkuRows] = useState<BulkSkuRow[]>([]);
+  const bulkSkuFile = useRef<HTMLInputElement>(null);
 
   const buscarSlots = useBuscarSlots();
   const reservar = useReservaTemporal();
@@ -80,6 +94,21 @@ export function AppointmentWizardModal({
   } = useForm<CitaWizardData>({ resolver: zodResolver(citaWizardSchema) });
   const items = useFieldArray({ control, name: "items" });
 
+  const calcularCantidadTotal = (item: { cantidadUnidades?: number; cantidadPorCaja?: number; cantidadCajasRecipientes?: number }) => {
+    const unidades = Number(item.cantidadUnidades) || 0;
+    const porCaja = Number(item.cantidadPorCaja) || 0;
+    const cajas = Number(item.cantidadCajasRecipientes) || 0;
+    if (unidades > 0) return unidades;
+    if (cajas > 0 && porCaja > 0) return cajas * porCaja;
+    return 0;
+  };
+
+  const calcularEstibas = (item: { cantidadUnidades?: number; cantidadPorCaja?: number; cantidadCajasRecipientes?: number }) => {
+    const cantidadTotal = calcularCantidadTotal(item);
+    if (cantidadTotal > 0) return Math.max(1, Math.ceil(cantidadTotal / 120));
+    return 1;
+  };
+
   useEffect(() => {
     if (!open) return;
     setStep(1);
@@ -94,7 +123,9 @@ export function AppointmentWizardModal({
       tipoMaterialId: tiposMaterial[1]?.id ?? tiposMaterial[0]?.id ?? "",
       fechaCita: initialFecha && initialFecha !== "TODAS" ? initialFecha : todayIso(),
       correosSolicitud: proveedores.find((p) => p.id === (lockedProveedorId ?? proveedores[0]?.id))?.emailContacto ? [proveedores.find((p) => p.id === (lockedProveedorId ?? proveedores[0]?.id))?.emailContacto ?? ""] : [],
-      items: [{ materialId: materiales.filter((material) => material.activo)[0]?.id ?? "", cantidadEstibas: 12, cantidadUnidades: 1200, ordenCompraNumero: "OC-SAP-98100" }],
+      items: [{ materialId: materiales.filter((material) => material.activo)[0]?.id ?? "", cantidadEstibas: calcularEstibas({ cantidadUnidades: 1200, cantidadPorCaja: 100, cantidadCajasRecipientes: 12 }), cantidadUnidades: 1200, cantidadCajasRecipientes: 12, cantidadPorCaja: 100, saldoBodega: 5, ordenCompraNumero: "OC-SAP-98100" }],
+      esCitaEspecial: defaultSpecial,
+      motivoCitaEspecial: defaultSpecial ? "Caso único solicitado por la sede para atención diferenciada." : "",
       vehiculoPlaca: "WZM-481",
       tipoVehiculo: "TRACTOMULA",
       placaRemolque: "R-99014",
@@ -124,6 +155,35 @@ export function AppointmentWizardModal({
     setValue("correosSolicitud", (getValues("correosSolicitud") ?? []).filter((item) => item !== correo), { shouldValidate: true });
   };
 
+  const parseBulkSkus = (content: string) => {
+    const lines = content.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const dataLines = lines[0]?.toLowerCase().startsWith("sku") ? lines.slice(1) : lines;
+    const rows = dataLines.map((line): BulkSkuRow => {
+      const [sku = "", cantidadEstibas = "", cantidadUnidades = "", ordenCompraNumero = ""] = line.split(/[;,]/).map((value) => value.trim());
+      const material = materialesHabilitados.find((item) => item.sku.toLowerCase() === sku.toLowerCase());
+      const estibas = Number(cantidadEstibas);
+      const unidades = Number(cantidadUnidades);
+      const row: BulkSkuRow = { materialId: material?.id ?? "", cantidadEstibas: estibas, cantidadUnidades: unidades, ordenCompraNumero };
+      if (!material || !Number.isInteger(estibas) || estibas < 1 || estibas > 36 || !Number.isInteger(unidades) || unidades < 1 || unidades > 100000 || ordenCompraNumero.length < 3) {
+        row.error = !material ? `SKU no habilitado o no encontrado: ${sku}` : "Estibas, unidades y orden de compra no son válidos.";
+      }
+      return row;
+    });
+    setBulkSkuRows(rows);
+  };
+
+  const addBulkSkus = () => {
+    if (!bulkSkuRows.length || bulkSkuRows.some((row) => row.error)) {
+      toast.error("Corrige las filas inválidas antes de agregarlas a la cita.");
+      return;
+    }
+    items.append(bulkSkuRows.map(({ materialId, cantidadEstibas, cantidadUnidades, ordenCompraNumero }) => ({ materialId, cantidadEstibas, cantidadUnidades, ordenCompraNumero })));
+    setBulkSkuOpen(false);
+    setBulkSkuText("");
+    setBulkSkuRows([]);
+    toast.success(`${bulkSkuRows.length} SKU agregados al manifiesto.`);
+  };
+
   useEffect(() => {
     if (!reserva) return;
     const interval = setInterval(() => {
@@ -143,10 +203,10 @@ export function AppointmentWizardModal({
   const materialesHabilitados = materiales.filter((material) => material.activo);
   const tipoMaterial = tiposMaterial.find((t) => t.id === watch("tipoMaterialId"));
   const requiereFrio = Boolean(tipoMaterial?.requiereRefrigeracion);
-  const totalEstibas = watchedItems.reduce((acc, it) => acc + (Number(it.cantidadEstibas) || 0), 0);
-  const totalUnidades = watchedItems.reduce((acc, it) => acc + (Number(it.cantidadUnidades) || 0), 0);
-  const pesoItem = (it: { materialId: string; cantidadEstibas: number }) =>
-    (Number(it.cantidadEstibas) || 0) * (materialesHabilitados.find((m) => m.id === it.materialId)?.pesoPromedioKg ?? 850);
+  const totalEstibas = watchedItems.reduce((acc, it) => acc + calcularEstibas(it as { cantidadUnidades?: number; cantidadPorCaja?: number; cantidadCajasRecipientes?: number }), 0);
+  const totalUnidades = watchedItems.reduce((acc, it) => acc + calcularCantidadTotal(it as { cantidadUnidades?: number; cantidadPorCaja?: number; cantidadCajasRecipientes?: number }), 0);
+  const pesoItem = (it: { materialId: string; cantidadEstibas?: number; cantidadUnidades?: number; cantidadPorCaja?: number; cantidadCajasRecipientes?: number }) =>
+    (calcularEstibas(it) || 0) * (materialesHabilitados.find((m) => m.id === it.materialId)?.pesoPromedioKg ?? 850);
   const pesoTotal = watchedItems.reduce((acc, it) => acc + pesoItem(it), 0);
   const duracion = Math.max(30, Math.ceil(15 + totalEstibas * (tipoMaterial?.minutosDescarguePorEstiba ?? 5)));
 
@@ -208,7 +268,10 @@ export function AppointmentWizardModal({
           sku: material?.sku ?? "SKU",
           descripcion: material?.descripcion ?? "Material",
           cantidadUnidades: it.cantidadUnidades,
-          cantidadEstibas: it.cantidadEstibas,
+          cantidadCajasRecipientes: it.cantidadCajasRecipientes,
+          cantidadPorCaja: it.cantidadPorCaja,
+          saldoBodega: it.saldoBodega,
+          cantidadEstibas: calcularEstibas(it),
           pesoTotalKg: pesoItem(it),
           ordenCompraNumero: it.ordenCompraNumero,
         };
@@ -222,6 +285,8 @@ export function AppointmentWizardModal({
             proveedorId: data.proveedorId,
             tipoOperacion: data.tipoOperacion,
             estado: "CONFIRMADA",
+            esCitaEspecial: data.esCitaEspecial,
+            motivoCitaEspecial: data.motivoCitaEspecial?.trim() || undefined,
             fechaCita: data.fechaCita,
             tiempos: {
               horaProgramadaInicio: `${data.fechaCita}T${slot.horaInicio}:00Z`,
@@ -359,19 +424,39 @@ export function AppointmentWizardModal({
               </Field>
             </div>
 
-            <div>
+            <div className="space-y-4">
+              {defaultSpecial && (
+                <div className="rounded-xl border p-3" style={{ background: "var(--inset-bg)", borderColor: "var(--inset-border)" }}>
+                  <Field label="Motivo de la cita especial" htmlFor="wz-motivo-cita-especial" error={errors.motivoCitaEspecial?.message}>
+                    <Textarea
+                      id="wz-motivo-cita-especial"
+                      rows={3}
+                      placeholder="Ejemplo: ingreso de producto de emergencia con despacho priorizado por cierre de bodega y caso único de operación."
+                      value={watch("motivoCitaEspecial") ?? ""}
+                      invalid={!!errors.motivoCitaEspecial}
+                      {...register("motivoCitaEspecial")}
+                    />
+                  </Field>
+                </div>
+              )}
+
               <SectionHeading
                 icon={<Package size={13} />}
                 title="Manifiesto de carga"
                 actions={
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    leftIcon={<Plus size={13} />}
-                    onClick={() => items.append({ materialId: materialesHabilitados[0]?.id ?? "", cantidadEstibas: 2, cantidadUnidades: 200, ordenCompraNumero: "OC-SAP-98100" })}
-                  >
-                    Agregar SKU
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={<Plus size={13} />}
+                      onClick={() => items.append({ materialId: materialesHabilitados[0]?.id ?? "", cantidadEstibas: calcularEstibas({ cantidadUnidades: 200, cantidadPorCaja: 100, cantidadCajasRecipientes: 2 }), cantidadUnidades: 200, cantidadCajasRecipientes: 2, cantidadPorCaja: 100, saldoBodega: 3, ordenCompraNumero: "OC-SAP-98100" })}
+                    >
+                      Agregar SKU
+                    </Button>
+                    <Button variant="secondary" size="sm" leftIcon={<Upload size={13} />} onClick={() => setBulkSkuOpen(true)}>
+                      Carga masiva
+                    </Button>
+                  </div>
                 }
                 className="mb-3"
               />
@@ -381,33 +466,58 @@ export function AppointmentWizardModal({
                 </p>
               )}
               <ul className="space-y-2">
-                {items.fields.map((f, i) => (
-                  <li key={f.id} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-12 sm:items-end" style={{ background: "var(--inset-bg)", borderColor: "var(--inset-border)" }}>
-                    <Field label="Material" htmlFor={`it-mat-${i}`} error={errors.items?.[i]?.materialId?.message} className="sm:col-span-5">
-                      <Select id={`it-mat-${i}`} {...register(`items.${i}.materialId`)}>
-                        {materialesHabilitados.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.sku} — {m.descripcion}
-                          </option>
-                        ))}
-                      </Select>
-                    </Field>
-                    <Field label="Estibas" htmlFor={`it-est-${i}`} error={errors.items?.[i]?.cantidadEstibas?.message} className="sm:col-span-2">
-                      <Input id={`it-est-${i}`} type="number" min={1} max={36} {...register(`items.${i}.cantidadEstibas`, { valueAsNumber: true })} />
-                    </Field>
-                    <Field label="Unidades" htmlFor={`it-und-${i}`} error={errors.items?.[i]?.cantidadUnidades?.message} className="sm:col-span-2">
-                      <Input id={`it-und-${i}`} type="number" min={1} {...register(`items.${i}.cantidadUnidades`, { valueAsNumber: true })} />
-                    </Field>
-                    <Field label="Orden de compra" htmlFor={`it-oc-${i}`} error={errors.items?.[i]?.ordenCompraNumero?.message} className="sm:col-span-2">
-                      <Input id={`it-oc-${i}`} style={{ fontFamily: "var(--font-mono)" }} {...register(`items.${i}.ordenCompraNumero`)} />
-                    </Field>
-                    <div className="flex justify-end sm:col-span-1">
-                      <IconButton label={`Quitar SKU ${i + 1}`} disabled={items.fields.length <= 1} onClick={() => items.remove(i)} className="disabled:opacity-30">
-                        <Trash2 size={14} />
-                      </IconButton>
-                    </div>
-                  </li>
-                ))}
+                {items.fields.map((f, i) => {
+                  const itemValue = watch(`items.${i}`);
+                  const estibasCalculadas = calcularEstibas(itemValue ?? {});
+
+                  return (
+                    <li key={f.id} className="rounded-lg border p-3" style={{ background: "var(--inset-bg)", borderColor: "var(--inset-border)" }}>
+                      <div className="grid gap-2 sm:grid-cols-12 sm:items-end">
+                        <Field label="Material" htmlFor={`it-mat-${i}`} error={errors.items?.[i]?.materialId?.message} className="sm:col-span-5">
+                          <Select id={`it-mat-${i}`} {...register(`items.${i}.materialId`)}>
+                            {materialesHabilitados.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.sku} — {m.descripcion}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+
+                        <div className="sm:col-span-2">
+                          <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: "var(--list-text-sub)" }}>
+                            Estibas
+                          </label>
+                          <div className="flex h-[40px] items-center rounded-lg border px-3 text-sm font-medium" style={{ background: "var(--surface-soft)", borderColor: "var(--inset-border)", color: "var(--sect-title)" }}>
+                            {estibasCalculadas}
+                          </div>
+                        </div>
+
+                        <Field label="Orden de compra" htmlFor={`it-oc-${i}`} error={errors.items?.[i]?.ordenCompraNumero?.message} className="sm:col-span-3">
+                          <Input id={`it-oc-${i}`} style={{ fontFamily: "var(--font-mono)" }} {...register(`items.${i}.ordenCompraNumero`)} />
+                        </Field>
+
+                        <div className="flex justify-end sm:col-span-2">
+                          <IconButton label={`Quitar SKU ${i + 1}`} disabled={items.fields.length <= 1} onClick={() => items.remove(i)} className="disabled:opacity-30">
+                            <Trash2 size={14} />
+                          </IconButton>
+                        </div>
+
+                        <Field label="Cantidad total" htmlFor={`it-total-${i}`} error={errors.items?.[i]?.cantidadUnidades?.message} className="sm:col-span-3">
+                          <Input id={`it-total-${i}`} type="number" min={1} {...register(`items.${i}.cantidadUnidades`, { valueAsNumber: true })} />
+                        </Field>
+                        <Field label="Cajas o recipientes" htmlFor={`it-cajas-${i}`} error={errors.items?.[i]?.cantidadCajasRecipientes?.message} className="sm:col-span-3">
+                          <Input id={`it-cajas-${i}`} type="number" min={1} {...register(`items.${i}.cantidadCajasRecipientes`, { valueAsNumber: true })} />
+                        </Field>
+                        <Field label="Cant. por caja" htmlFor={`it-por-caja-${i}`} error={errors.items?.[i]?.cantidadPorCaja?.message} className="sm:col-span-3">
+                          <Input id={`it-por-caja-${i}`} type="number" min={1} {...register(`items.${i}.cantidadPorCaja`, { valueAsNumber: true })} />
+                        </Field>
+                        <Field label="Saldo" htmlFor={`it-saldo-${i}`} error={errors.items?.[i]?.saldoBodega?.message} className="sm:col-span-3">
+                          <Input id={`it-saldo-${i}`} type="number" min={0} {...register(`items.${i}.saldoBodega`, { valueAsNumber: true })} />
+                        </Field>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
 
@@ -417,6 +527,89 @@ export function AppointmentWizardModal({
             </Alert>
           </div>
         )}
+
+        <Modal
+          open={bulkSkuOpen}
+          onClose={() => setBulkSkuOpen(false)}
+          size="xl"
+          title="Carga masiva de SKU"
+          description="Agrega varios materiales al manifiesto de esta cita mediante CSV."
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setBulkSkuOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={addBulkSkus} disabled={!bulkSkuRows.length || bulkSkuRows.some((row) => row.error)}>
+                Agregar SKU al manifiesto
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <Alert variant="info" title="Formato del archivo">
+              Usa una fila por SKU con estas columnas: <span style={{ fontFamily: "var(--font-mono)" }}>sku,cantidadEstibas,cantidadUnidades,ordenCompraNumero</span>.
+            </Alert>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" size="sm" onClick={() => {
+                const blob = new Blob(["sku,cantidadEstibas,cantidadUnidades,ordenCompraNumero\nSKU-LACT-001,12,1200,OC-SAP-98100\n"], { type: "text/csv;charset=utf-8" });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = "plantilla-skus-cita.csv";
+                link.click();
+                URL.revokeObjectURL(url);
+              }}>
+                Descargar plantilla
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => bulkSkuFile.current?.click()}>
+                Seleccionar CSV
+              </Button>
+              <input
+                ref={bulkSkuFile}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    const content = String(reader.result ?? "");
+                    setBulkSkuText(content);
+                    parseBulkSkus(content);
+                  };
+                  reader.readAsText(file);
+                }}
+              />
+            </div>
+            <textarea
+              value={bulkSkuText}
+              onChange={(event) => {
+                setBulkSkuText(event.target.value);
+                parseBulkSkus(event.target.value);
+              }}
+              rows={6}
+              placeholder="sku,cantidadEstibas,cantidadUnidades,ordenCompraNumero\nSKU-LACT-001,12,1200,OC-SAP-98100"
+              className="w-full rounded-lg border p-3 text-[12px]"
+              style={{ background: "var(--inset-bg)", borderColor: "var(--inset-border)", color: "var(--list-text)", fontFamily: "var(--font-mono)" }}
+            />
+            {bulkSkuRows.length > 0 && (
+              <div className="overflow-x-auto rounded-lg border" style={{ borderColor: "var(--card-border)" }}>
+                <table className="w-full text-left text-[12px]">
+                  <thead style={{ background: "var(--inset-bg)" }}>
+                    <tr><th className="px-3 py-2">SKU</th><th className="px-3 py-2">Estibas</th><th className="px-3 py-2">Unidades</th><th className="px-3 py-2">Estado</th></tr>
+                  </thead>
+                  <tbody>
+                    {bulkSkuRows.map((row, index) => {
+                      const material = materialesHabilitados.find((item) => item.id === row.materialId);
+                      return <tr key={`${row.materialId}-${index}`} className="border-t" style={{ borderColor: "var(--card-divider)" }}><td className="px-3 py-2" style={{ fontFamily: "var(--font-mono)" }}>{material?.sku ?? "—"}</td><td className="px-3 py-2">{row.cantidadEstibas}</td><td className="px-3 py-2">{row.cantidadUnidades}</td><td className="px-3 py-2">{row.error ? <span style={{ color: "var(--atom-coral-500)" }}>{row.error}</span> : <Badge tone="green">Lista</Badge>}</td></tr>;
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </Modal>
 
         {step === 2 && (
           <div className="space-y-4">

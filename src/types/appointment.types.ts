@@ -21,6 +21,9 @@ export interface CitaDetalleItem {
   sku: string;
   descripcion: string;
   cantidadUnidades: number;
+  cantidadCajasRecipientes?: number;
+  cantidadPorCaja?: number;
+  saldoBodega?: number;
   cantidadEstibas: number;
   pesoTotalKg: number;
   ordenCompraNumero?: string;
@@ -50,6 +53,8 @@ export interface Cita {
   proveedorId: string;
   tipoOperacion: TipoOperacionCita;
   estado: EstadoCita;
+  esCitaEspecial?: boolean;
+  motivoCitaEspecial?: string;
   
   // Asignaciones
   conductorId?: string;

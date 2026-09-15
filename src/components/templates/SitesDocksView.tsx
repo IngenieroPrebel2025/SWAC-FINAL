@@ -168,7 +168,7 @@ export function SitesDocksView() {
         title="Sedes, muelles y capacidad"
         description="Configuración de sedes, muelles de carga, turnos de atención y reglas de compatibilidad vehicular."
         actions={
-          hasMultipleSedes ? (
+          isGlobalAdmin && hasMultipleSedes ? (
             <div className="w-60">
               <Select value={sedeId} onChange={(e) => setActiveSedeId(e.target.value)} aria-label="Sede activa">
                 {availableSedes.map((s) => (
@@ -323,9 +323,9 @@ export function SitesDocksView() {
                     ))}
                   </dl>
                   <div className="mt-auto flex items-center justify-between border-t pt-3" style={{ borderColor: "var(--card-divider)" }}>
-                    <Button size="sm" variant={active ? "primary" : "secondary"} disabled={active} onClick={() => setActiveSedeId(sede.id)}>
+                    {isGlobalAdmin && <Button size="sm" variant={active ? "primary" : "secondary"} disabled={active} onClick={() => setActiveSedeId(sede.id)}>
                       {active ? "Sede activa" : "Seleccionar"}
-                    </Button>
+                    </Button>}
                     <span className="text-[11px]" style={{ color: "var(--result-text)", fontFamily: "var(--font-mono)" }}>
                       {sede.zonaHoraria}
                     </span>
