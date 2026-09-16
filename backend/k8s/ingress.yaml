@@ -1,0 +1,35 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: django-backend
+  namespace: backend
+  labels:
+    app.kubernetes.io/name: django-backend
+    app.kubernetes.io/component: backend
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    # Enable HTTP -> HTTPS redirect
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  # Override ingressClassName per overlay (e.g. nginx, traefik, etc.)
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        # Replace with your actual hostname via overlay patch
+        - api.example.com
+      secretName: django-backend-tls
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: django-backend
+                port:
+                  number: 80

@@ -1,0 +1,54 @@
+# Version control
+.git
+.gitignore
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.pycache
+
+# Environment files (never bake secrets into the image)
+.env
+.env.*
+
+# Virtual environments
+venv
+.venv
+env
+.env
+
+# Python packaging artifacts
+*.egg-info
+dist
+build
+
+# Test / QA artifacts
+.pytest_cache
+.mypy_cache
+.ruff_cache
+htmlcov
+.coverage
+.coverage.*
+coverage.xml
+
+# Node (if any front-end tooling exists)
+node_modules
+
+# Kubernetes manifests (not needed at runtime)
+k8s
+
+# Documentation
+docs
+*.md
+
+# IDE / editor configs
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS artifacts
+.DS_Store
+Thumbs.db
