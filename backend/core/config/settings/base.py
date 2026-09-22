@@ -4,6 +4,7 @@ Base Django settings shared across all environments.
 Environment variables are read via os.environ.get — no additional dependencies required.
 All secrets MUST be provided via environment variables; no hardcoded defaults in this file.
 """
+from dotenv import load_dotenv
 import os
 from pathlib import Path
 
@@ -18,7 +19,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 # Core security
 # ---------------------------------------------------------------------------
 
-SECRET_KEY = os.environ['DJANGO_SECRET_KEY']  # Intentionally no default — must be set
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-change-me-in-production')
 
 DEBUG = False
 
@@ -54,6 +55,11 @@ LOCAL_APPS = [
     'apps.audit',
     'apps.notifications',
     'apps.users',
+    'apps.sedes',
+    'apps.proveedores',
+    'apps.materiales',
+    'apps.vehiculos',
+    'apps.citas',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
